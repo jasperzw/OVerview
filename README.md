@@ -27,6 +27,6 @@ Now you can already run it and check if it outputs a .csv
 
 to a start date far before like a year
 
-# How to interprate the data
+# How to interpret the data
 
 It is a bit of a mess so i will come back to that later. For now just look at it with excel
