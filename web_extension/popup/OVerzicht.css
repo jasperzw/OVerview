@@ -1,0 +1,16 @@
+html,
+body {
+  width: 200px;
+}
+
+.hidden {
+  display: none;
+}
+
+#OVerzicht-knop {
+  border: none;
+  width: 90%;
+  margin: 3% auto;
+  padding: 10px;
+  text-align: center;
+}
