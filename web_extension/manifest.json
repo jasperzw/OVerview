@@ -1,21 +1,24 @@
 {
-    "manifest_version": 2,
-    "name": "OVerzicht",
-    "version": "1.0",
-  
-    "description": "Geeft een mooi overzicht over reis geschiedenis",
-    "homepage_url": "https://github.com/jasperzw/OVerview",
-    "icons": {
-      "48": "icons/trein-48.png",
-      "96": "icons/trein-96.png"
-    },
-  
-    "permissions": ["activeTab"],
-  
-    "browser_action": {
-      "default_icon": "icons/trein-48.png",
-      "default_title": "OVerzicht",
-      "default_popup": "popup/OVerzicht.html"
-    }
+  "manifest_version": 2,
+  "name": "OVerzicht",
+  "version": "1.0",
+  "description": "Geeft een mooi overzicht over reis geschiedenis",
+  "homepage_url": "https://github.com/jasperzw/OVerview",
+  "icons": {
+    "48": "icons/trein-48.png",
+    "96": "icons/trein-96.png"
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["script/background.js"]
+  },
+  "browser_action": {
+    "default_icon": "icons/trein-48.png",
+    "default_title": "OVerzicht",
+    "default_popup": "popup/OVerzicht.html"
   }
-  
+}
