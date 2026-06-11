@@ -11,10 +11,11 @@ travel history on an interactive map.
 
 1. Adds a **🗺 OVerzicht** button next to each card on
    [ov-chipkaart.nl](https://www.ov-chipkaart.nl/nl/mijn-ov-chip/mijn-ov-reishistorie).
-2. On click it fetches up to five years of travel history through the site's own backend
-   API (reusing the session token from the page you're already logged in to). It walks
-   backwards in 30-day windows and stops when older windows stop returning data, so if
-   the backend only retains a year you simply get that year.
+2. On click it fetches up to two years of travel history through the site's own backend
+   API (reusing the session token from the page you're already logged in to; Translink
+   keeps ±18 months). It walks backwards in 30-day windows with a polite delay between
+   requests, stops when older windows stop returning data, and aborts immediately —
+   keeping the partial result — if the WAF blocks the session.
 3. It parses the history and stores it in `chrome.storage.local`.
 4. It opens a dashboard tab with a Leaflet map that draws every journey as a real
    geometric route, plus a sortable trips table and statistics tabs.

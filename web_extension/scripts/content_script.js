@@ -224,15 +224,21 @@ function dateChunks(from, to, chunkDays = 30) {
 
 // ─── Data pipeline ────────────────────────────────────────────────────────────
 
-// How far back to try. Unclear whether the backend keeps more than a year;
-// chunks are therefore fetched newest → oldest and we stop going further back
-// once chunks older than a year consistently return nothing. Worst case the
-// result is exactly the old 1-year scrape.
-const HISTORY_YEARS = 5;
+// How far back to try. Translink keeps ±18 months of reishistorie, so 2 years
+// covers everything that can exist with margin (see
+// research/translink_policy_notes.md). Chunks are fetched newest → oldest and
+// we stop going further back once chunks older than a year consistently
+// return nothing.
+const HISTORY_YEARS = 2;
 // Consecutive no-data chunks (>1 jaar oud) before giving up. Generous on
 // purpose: 8 chunks = 240 days, so a half-year travel gap (e.g. living
 // abroad) doesn't get mistaken for the backend's retention limit.
 const MAX_EMPTY_OLD_CHUNKS = 8;
+// Pause between chunks: human-paced traffic instead of a request burst that
+// trips the link11 WAF.
+const CHUNK_DELAY_MS = 1500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchAllCards() {
   console.group('OVerzicht fetch');
@@ -260,6 +266,10 @@ async function fetchAllCards() {
   const yearBoundary = new Date(today);
   yearBoundary.setFullYear(yearBoundary.getFullYear() - 1);
   const allTrips = [];
+  // A 471 mid-scrape means the WAF blocked us / the session expired: stop the
+  // whole scrape immediately (no retries against a block) but keep the
+  // partial result.
+  let wafBlocked = false;
 
   for (const card of cards) {
     console.group(`Kaart: ${card.alias}`);
@@ -296,6 +306,7 @@ async function fetchAllCards() {
     console.info(`${chunks.length} chunks (30 dagen elk, nieuwste eerst, tot ${HISTORY_YEARS} jaar terug)`);
     let cardTrips = 0;
     let emptyOldStreak = 0;
+    let chunkIdx = 0;
     const chunkResults = []; // newest first; reversed before storing
 
     for (const { start, end } of chunks) {
@@ -305,6 +316,7 @@ async function fetchAllCards() {
           'bewaartermijn bereikt, stop met verder teruggaan');
         break;
       }
+      if (chunkIdx++ > 0) await sleep(CHUNK_DELAY_MS);
       const markEmpty = () => { if (olderThanYear) emptyOldStreak++; };
       console.group(`Chunk ${start} → ${end}`);
 
@@ -316,6 +328,13 @@ async function fetchAllCards() {
         transactionKindFilter: null,
       };
       const txResp = await apiPost('/cardtravelhistory/cardtransactions', txBody);
+      if (txResp.status === 471) {
+        console.warn('WAF-blokkade (HTTP 471) — scrape gestopt, deelresultaat blijft behouden. ' +
+          'Herlaad de pagina voor een nieuwe sessie.');
+        wafBlocked = true;
+        console.groupEnd();
+        break;
+      }
       if (!txResp.ok) {
         const body = await readErrorBody(txResp);
         console.warn(`cardtransactions HTTP ${txResp.status}`, body);
@@ -344,6 +363,13 @@ async function fetchAllCards() {
         selectedTransactions,
       };
       const docResp = await apiPost('/cardtravelhistory/generatedocument', docBody);
+      if (docResp.status === 471) {
+        console.warn('WAF-blokkade (HTTP 471) — scrape gestopt, deelresultaat blijft behouden. ' +
+          'Herlaad de pagina voor een nieuwe sessie.');
+        wafBlocked = true;
+        console.groupEnd();
+        break;
+      }
       if (!docResp.ok) {
         const body = await readErrorBody(docResp);
         console.warn(`generatedocument HTTP ${docResp.status}`, body);
@@ -391,6 +417,8 @@ async function fetchAllCards() {
 
     console.info(`Totaal voor ${card.alias}: ${cardTrips} ritten`);
     console.groupEnd(); // card
+
+    if (wafBlocked) break; // stop over all cards; partial data is still stored
   }
 
   console.info(`Klaar. Totaal alle kaarten: ${allTrips.length} ritten`);
