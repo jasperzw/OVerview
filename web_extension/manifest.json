@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "OVerzicht",
+  "version": "0.3.0",
+  "description": "Visualiseer je OV-reisgeschiedenis op een kaart",
+  "icons": {
+    "48": "icons/trein-48.png",
+    "96": "icons/trein-96.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "overzicht@overzicht.extension",
+      "strict_min_version": "110.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "declarativeNetRequest"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "orm_referer",
+        "enabled": true,
+        "path": "rules/orm_referer.json"
+      }
+    ]
+  },
+  "host_permissions": [
+    "https://www.ov-chipkaart.nl/*",
+    "https://tiles.openrailwaymap.org/*",
+    "https://*.basemaps.cartocdn.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.ov-chipkaart.nl/*"],
+      "js": ["dashboard/matching.js", "scripts/content_script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_icon": "icons/trein-48.png",
+    "default_title": "OVerzicht",
+    "default_popup": "popup/OVerzicht.html"
+  },
+  "background": {
+    "scripts": ["scripts/background.js"]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["scripts/xhr_logger.js", "scripts/api_bridge.js"],
+      "matches": ["https://www.ov-chipkaart.nl/*"]
+    },
+    {
+      "resources": ["data/stops.json", "data/routes.json", "data/schedules.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

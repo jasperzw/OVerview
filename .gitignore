@@ -1,0 +1,9 @@
+*.csv
+
+# Local data dumps & large source archives
+*.zip
+output.csv
+
+# Editor / tooling
+.claude/
+node_modules/

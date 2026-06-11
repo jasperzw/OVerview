@@ -1,0 +1,305 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f0f4ff;
+  color: #111;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #003082;
+  color: #fff;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+header h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.controls-sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(255,255,255,0.25);
+  margin: 0 2px;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  color: #ccd5ff;
+  gap: 2px;
+}
+
+.controls input[type="date"] {
+  padding: 4px 6px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #111;
+}
+
+.controls button {
+  padding: 5px 11px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-preset {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+}
+
+.btn-preset:hover,
+.btn-preset.active {
+  background: rgba(255,255,255,0.25);
+}
+
+#btn-apply { background: #ffb612; color: #003082; }
+#btn-reset  { background: rgba(255,255,255,0.15); color: #fff; }
+
+.stats {
+  margin-left: auto;
+  font-size: 0.8rem;
+  text-align: right;
+  line-height: 1.6;
+  color: #ccd5ff;
+}
+
+.stats strong { color: #fff; }
+
+/* ── Tabs ───────────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid #003082;
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 8px 22px;
+  border: none;
+  background: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab:hover { color: #003082; }
+
+.tab.active {
+  color: #003082;
+  border-bottom-color: #003082;
+}
+
+/* ── Tab panels ─────────────────────────────────────────────────────────────── */
+
+.tab-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#map {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Trips table ────────────────────────────────────────────────────────────── */
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+}
+
+#trips-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+#trips-table thead {
+  position: sticky;
+  top: 0;
+  background: #003082;
+  color: #fff;
+  z-index: 1;
+}
+
+#trips-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#trips-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e0e6f5;
+  white-space: nowrap;
+}
+
+#trips-table tbody tr:hover { background: #eef2ff; }
+
+#trips-table tbody tr:nth-child(even) { background: #f7f9ff; }
+#trips-table tbody tr:nth-child(even):hover { background: #eef2ff; }
+
+.amount-debit  { color: #c0392b; font-weight: 600; }
+.amount-credit { color: #27ae60; font-weight: 600; }
+
+.operator-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+/* ── Debug / Routes table ────────────────────────────────────────────────────── */
+
+#debug-table {
+  table-layout: fixed;
+  min-width: 1455px;   /* sum of default <col> widths; table scrolls horizontally below this */
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+#debug-table thead {
+  position: sticky;
+  top: 0;
+  background: #003082;
+  color: #fff;
+  z-index: 1;
+}
+
+#debug-table th {
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  resize: horizontal;       /* drag right edge to widen any column */
+  box-sizing: border-box;
+}
+
+#debug-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #e0e6f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+#debug-table tbody tr:hover { background: #eef2ff; }
+#debug-table tbody tr:nth-child(even) { background: #f7f9ff; }
+#debug-table tbody tr:nth-child(even):hover { background: #eef2ff; }
+
+.dbg-product { color: #555; }
+.dbg-match   { color: #333; }
+.dbg-num     { text-align: right; font-variant-numeric: tabular-nums; }
+
+.dbg-ok-dot  { color: #27ae60; font-weight: 700; }
+.dbg-err-dot { color: #c0392b; font-weight: 700; }
+
+.dbg-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.dbg-ok   { background: #d4efdf; color: #1a6b3a; }
+.dbg-warn { background: #fdebd0; color: #935800; }
+.dbg-err  { background: #fadbd8; color: #922b21; }
+
+/* ── No-data overlay ────────────────────────────────────────────────────────── */
+
+#no-data {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px 32px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  text-align: center;
+  max-width: 420px;
+  line-height: 1.6;
+}
+
+#no-data a { color: #003082; font-weight: 600; }
+
+.hidden { display: none !important; }
+
+/* ── Leaflet overrides ───────────────────────────────────────────────────────── */
+
+.leaflet-popup-content {
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.leaflet-control-layers {
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  font-size: 0.8rem !important;
+}
+
+.leaflet-control-layers-expanded { padding: 6px 10px !important; }
+
+/* ── Legend ─────────────────────────────────────────────────────────────────── */
+
+#legend {
+  position: absolute;
+  bottom: 28px;
+  right: 10px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.92);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  line-height: 1.8;
+}
+
+#legend .dot {
+  display: inline-block;
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}

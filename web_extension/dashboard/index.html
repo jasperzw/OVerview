@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OVerzicht</title>
+
+  <!-- Leaflet — served from local lib/ to comply with MV3 CSP -->
+  <link rel="stylesheet" href="../lib/leaflet.css" />
+  <script src="../lib/leaflet.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🗺 OVerzicht</h1>
+
+    <div class="controls">
+      <button class="btn-preset" data-days="7">Week</button>
+      <button class="btn-preset" data-days="30">Maand</button>
+      <button class="btn-preset" data-days="90">3 Mnd</button>
+      <button class="btn-preset" data-days="365">Jaar</button>
+
+      <span class="controls-sep"></span>
+
+      <label>
+        Van
+        <input type="date" id="date-from" />
+      </label>
+      <label>
+        Tot
+        <input type="date" id="date-to" />
+      </label>
+      <button id="btn-apply">Toepassen</button>
+      <button id="btn-reset">Alles</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="map">Kaart</button>
+    <button class="tab" data-tab="table">Ritten</button>
+    <button class="tab" data-tab="debug">Routes</button>
+  </nav>
+
+  <div id="tab-map" class="tab-panel">
+    <div id="map"></div>
+  </div>
+
+  <div id="tab-table" class="tab-panel hidden">
+    <div class="table-wrap">
+      <table id="trips-table">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Vertrek</th>
+            <th>Van</th>
+            <th>Aankomst</th>
+            <th>Naar</th>
+            <th>Bedrag</th>
+            <th>Product</th>
+            <th>Vervoerder</th>
+            <th>Kaart</th>
+          </tr>
+        </thead>
+        <tbody id="trips-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-debug" class="tab-panel hidden">
+    <div class="table-wrap">
+      <table id="debug-table">
+        <colgroup>
+          <col style="width:90px">   <!-- Datum -->
+          <col style="width:58px">   <!-- Check-in -->
+          <col style="width:58px">   <!-- Check-out -->
+          <col style="width:140px">  <!-- Van -->
+          <col style="width:140px">  <!-- Naar -->
+          <col style="width:85px">   <!-- Vervoerder -->
+          <col style="width:150px">  <!-- Product (CSV) -->
+          <col style="width:130px">  <!-- Stop van -->
+          <col style="width:130px">  <!-- Stop naar -->
+          <col style="width:50px">   <!-- Pool -->
+          <col style="width:80px">   <!-- Code -->
+          <col style="width:70px">   <!-- Gefilterd -->
+          <col style="width:110px">  <!-- GTFS vertrek -->
+          <col style="width:210px">  <!-- Beste match -->
+          <col style="width:80px">   <!-- Score -->
+          <col style="width:62px">   <!-- Van idx -->
+          <col style="width:62px">   <!-- Naar idx -->
+          <col style="width:62px">   <!-- Punten -->
+          <col style="width:110px">  <!-- Resultaat -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Check-in</th>
+            <th>Check-out</th>
+            <th>Van</th>
+            <th>Naar</th>
+            <th>Vervoerder</th>
+            <th>Product (CSV)</th>
+            <th>Stop van</th>
+            <th>Stop naar</th>
+            <th title="Aantal routes in pool voor filter">Pool</th>
+            <th title="Geëxtraheerde lijncode (Intercity / Sprinter / 12 / …)">Code</th>
+            <th title="Pool na code-filter">Gefilterd</th>
+            <th title="Gevonden GTFS-vertrek (tijdstip + type)">GTFS vertrek</th>
+            <th>Beste match</th>
+            <th title="Kwaliteitsscore (lager = beter)">Score</th>
+            <th title="Index van vertrekpunt in route-polyline">Van idx</th>
+            <th title="Index van bestemmingspunt in route-polyline">Naar idx</th>
+            <th title="Totaal aantal punten in route-polyline">Punten</th>
+            <th>Resultaat</th>
+          </tr>
+        </thead>
+        <tbody id="debug-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="no-data" class="hidden">
+    <p>
+      Nog geen reisdata. Ga naar
+      <a href="https://www.ov-chipkaart.nl/nl/mijn-ov-chip/mijn-ov-reishistorie" target="_blank">
+        Mijn reishistorie
+      </a>
+      en klik op de <strong>OVerzicht</strong>-knop.
+    </p>
+  </div>
+
+  <script src="matching.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
