@@ -564,6 +564,53 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   renderTrips(allTrips);
 });
 
+// ─── Export / import ──────────────────────────────────────────────────────────
+// Back-up of the raw scraped rows for when ov-chipkaart.nl is unreachable or
+// data ages past the backend's retention. Export writes exactly what storage
+// holds (unmerged rows, so a re-import behaves like a fresh fetch); import
+// accepts that file — or a bare trips array — replaces storage and reloads.
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  chrome.storage.local.get(['trips', 'fetchedAt'], ({ trips, fetchedAt }) => {
+    if (!trips || !trips.length) { alert('Geen reisdata om te exporteren.'); return; }
+    const payload = {
+      format: 'overzicht-trips',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      fetchedAt: fetchedAt ?? null,
+      trips,
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `overzicht-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+});
+
+const importFileInput = document.getElementById('import-file');
+
+document.getElementById('btn-import').addEventListener('click', () => importFileInput.click());
+
+importFileInput.addEventListener('change', () => {
+  const file = importFileInput.files?.[0];
+  if (!file) return;
+  file.text().then((text) => {
+    let data;
+    try { data = JSON.parse(text); } catch { alert('Geen geldig JSON-bestand.'); return; }
+    const trips = Array.isArray(data) ? data : data?.trips;
+    if (!Array.isArray(trips) || !trips.length
+        || !trips.some((t) => t && t.date && (t.from || t.to))) {
+      alert('Dit lijkt geen OVerzicht-export: geen ritten gevonden.');
+      return;
+    }
+    if (!confirm(`${trips.length} rijen importeren? Dit vervangt de huidige reisdata.`)) return;
+    chrome.storage.local.set({ trips, fetchedAt: data.fetchedAt ?? Date.now() },
+      () => location.reload());
+  });
+});
+
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 // Full-width bar at the bottom of the map: an intensity graph (ritten per dag)
 // over the whole rendered period, with a draggable highlight window the width

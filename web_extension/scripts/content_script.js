@@ -50,7 +50,7 @@ function injectButtons() {
     const btn = document.createElement('button');
     btn.className   = 'overzicht-btn';
     btn.textContent = '🗺 OVerzicht';
-    btn.title       = `Haal een jaar reishistorie op voor ${cardName}`;
+    btn.title       = `Haal tot ${HISTORY_YEARS} jaar reishistorie op voor ${cardName}`;
     btn.style.cssText = `
       display: block;
       margin: 6px 0 6px 32px;
@@ -224,6 +224,13 @@ function dateChunks(from, to, chunkDays = 30) {
 
 // ─── Data pipeline ────────────────────────────────────────────────────────────
 
+// How far back to try. Unclear whether the backend keeps more than a year;
+// chunks are therefore fetched newest → oldest and we stop going further back
+// once chunks older than a year consistently return nothing. Worst case the
+// result is exactly the old 1-year scrape.
+const HISTORY_YEARS = 5;
+const MAX_EMPTY_OLD_CHUNKS = 4; // consecutive no-data chunks (>1 jaar oud) before giving up
+
 async function fetchAllCards() {
   console.group('OVerzicht fetch');
 
@@ -244,9 +251,11 @@ async function fetchAllCards() {
   console.info(`✅ ${cards.length} kaarten:`, cards.map(c => `${c.alias} (${c.mediumId})`));
   console.groupEnd();
 
-  const today   = new Date();
-  const yearAgo = new Date(today);
-  yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  const today        = new Date();
+  const historyStart = new Date(today);
+  historyStart.setFullYear(historyStart.getFullYear() - HISTORY_YEARS);
+  const yearBoundary = new Date(today);
+  yearBoundary.setFullYear(yearBoundary.getFullYear() - 1);
   const allTrips = [];
 
   for (const card of cards) {
@@ -275,12 +284,25 @@ async function fetchAllCards() {
     console.info('cardStatus:', detail.cardStatus ?? '(niet aanwezig)');
     console.groupEnd();
 
-    // ── 3-5. Per 30-day chunk ───────────────────────────────────────────────
-    const chunks = dateChunks(yearAgo, today, 30);
-    console.info(`${chunks.length} chunks (30 dagen elk)`);
+    // ── 3-5. Per 30-day chunk, newest first ─────────────────────────────────
+    // The last year is always fetched in full (failures only skip that chunk,
+    // as before). Chunks older than a year are exploratory: after
+    // MAX_EMPTY_OLD_CHUNKS consecutive chunks without data we assume the
+    // backend's retention limit is reached and stop going further back.
+    const chunks = dateChunks(historyStart, today, 30).reverse();
+    console.info(`${chunks.length} chunks (30 dagen elk, nieuwste eerst, tot ${HISTORY_YEARS} jaar terug)`);
     let cardTrips = 0;
+    let emptyOldStreak = 0;
+    const chunkResults = []; // newest first; reversed before storing
 
     for (const { start, end } of chunks) {
+      const olderThanYear = new Date(end) < yearBoundary;
+      if (olderThanYear && emptyOldStreak >= MAX_EMPTY_OLD_CHUNKS) {
+        console.info(`${emptyOldStreak} opeenvolgende chunks ouder dan een jaar zonder data — ` +
+          'bewaartermijn bereikt, stop met verder teruggaan');
+        break;
+      }
+      const markEmpty = () => { if (olderThanYear) emptyOldStreak++; };
       console.group(`Chunk ${start} → ${end}`);
 
       // 3 · cardtransactions
@@ -294,13 +316,14 @@ async function fetchAllCards() {
       if (!txResp.ok) {
         const body = await readErrorBody(txResp);
         console.warn(`cardtransactions HTTP ${txResp.status}`, body);
+        markEmpty();
         console.groupEnd();
         continue;
       }
       const txData       = await txResp.json();
       const transactions = txData.cardTransactionSummaries ?? [];
       console.info(`totalItems: ${txData.totalItems ?? '?'}, returned: ${transactions.length}`);
-      if (!transactions.length) { console.groupEnd(); continue; }
+      if (!transactions.length) { markEmpty(); console.groupEnd(); continue; }
 
       const ids = transactions.map(t => t.transactionId);
       console.info('transactionIds:', ids);
@@ -321,6 +344,7 @@ async function fetchAllCards() {
       if (!docResp.ok) {
         const body = await readErrorBody(docResp);
         console.warn(`generatedocument HTTP ${docResp.status}`, body);
+        markEmpty();
         console.groupEnd();
         continue;
       }
@@ -334,6 +358,7 @@ async function fetchAllCards() {
                 ?? findFirstBase64(docData);
       if (!b64) {
         console.warn('Geen base64 content gevonden. Response:', docData);
+        markEmpty();
         console.groupEnd();
         continue;
       }
@@ -344,11 +369,22 @@ async function fetchAllCards() {
 
       const trips = parseOVCsv(csvText, card.alias);
       console.info(`${trips.length} ritten geparsed`);
-      allTrips.push(...trips);
-      cardTrips += trips.length;
+      if (trips.length) {
+        emptyOldStreak = 0;
+        chunkResults.push(trips);
+        cardTrips += trips.length;
+      } else {
+        markEmpty();
+      }
 
       console.groupEnd(); // chunk
     }
+
+    // Chunks were fetched newest-first; store oldest-first so the row order
+    // (check-in before its journey row) stays the same as the 1-year scrape —
+    // mergeJourneys in the dashboard depends on it across chunk boundaries.
+    chunkResults.reverse();
+    for (const trips of chunkResults) allTrips.push(...trips);
 
     console.info(`Totaal voor ${card.alias}: ${cardTrips} ritten`);
     console.groupEnd(); // card

@@ -11,11 +11,16 @@ travel history on an interactive map.
 
 1. Adds a **🗺 OVerzicht** button next to each card on
    [ov-chipkaart.nl](https://www.ov-chipkaart.nl/nl/mijn-ov-chip/mijn-ov-reishistorie).
-2. On click it fetches up to a year of travel history through the site's own backend API
-   (reusing the session token from the page you're already logged in to).
+2. On click it fetches up to five years of travel history through the site's own backend
+   API (reusing the session token from the page you're already logged in to). It walks
+   backwards in 30-day windows and stops when older windows stop returning data, so if
+   the backend only retains a year you simply get that year.
 3. It parses the history and stores it in `chrome.storage.local`.
 4. It opens a dashboard tab with a Leaflet map that draws every journey as a real
-   geometric route, plus a sortable trips table.
+   geometric route, plus a sortable trips table and statistics tabs.
+5. The dashboard header has **⬇ Export** / **⬆ Import** buttons: download all gathered
+   travel data as a JSON back-up and load it back later — useful when ov-chipkaart.nl
+   is down or data has aged past its retention window.
 
 Routes are reconstructed from open data (OpenOV *lijnnetkaart* geometries and the
 GTFS-NL feed), so each trip is drawn along the actual track/line rather than as a

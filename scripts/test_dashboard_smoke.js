@@ -25,6 +25,7 @@ function el(id) {
         },
       },
       addEventListener(type, fn) { this._h[type] = fn; },
+      click() {},
       setAttribute(k, v) { this._attrs[k] = v; },
       getBoundingClientRect() { return { left: 0, top: 0, width: 1000, height: 46 }; },
       setPointerCapture() {},
@@ -133,6 +134,12 @@ global.fetch = async (url) => ({
   },
 });
 
+global.URL.createObjectURL = () => 'blob:fake';
+global.URL.revokeObjectURL = () => {};
+global.alert   = (m) => console.log('ALERT:', m);
+global.confirm = () => true;
+global.location = { reload() { global.location.reloaded = true; } };
+
 global.OVMatch = require(path.join(DASH, 'matching.js'));
 global.OVStats = require(path.join(DASH, 'stats.js'));
 
@@ -142,6 +149,22 @@ require(path.join(DASH, 'app.js'));
 // init() is async — give it a tick, then poke the timeline.
 setTimeout(() => {
   try {
+    // Export: the handler builds a download anchor from storage
+    let lastAnchor = null;
+    const origCreate = global.document.createElement;
+    global.document.createElement = (t) => (lastAnchor = origCreate(t));
+    el('btn-export')._h.click();
+    global.document.createElement = origCreate;
+    console.log('export filename:', lastAnchor && lastAnchor.download,
+      '| href set:', !!(lastAnchor && lastAnchor.href));
+
+    // Import: a wrapper file replaces storage and reloads (asserted at the end)
+    global.chrome.storage.local.set = (obj, cb) => { global.__imported = obj; cb && cb(); };
+    el('import-file').files = [{
+      text: async () => JSON.stringify({ format: 'overzicht-trips', fetchedAt: 123, trips }),
+    }];
+    el('import-file')._h.change();
+
     const trains = el('stats-trains').innerHTML.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     console.log('treinen: IC-ratio:', (trains.match(/(\d+% IC)/) ?? [])[1],
       '(expected 75% IC: 3 Intercity, 1 Sprinter)');
@@ -184,6 +207,9 @@ setTimeout(() => {
       el('tl-reset')._h.click();
       console.log('after reset:', el('tl-label').textContent,
         '| window hidden:', el('tl-window').classList._set.has('hidden'));
+      console.log('import stored rows:', global.__imported?.trips?.length,
+        '| fetchedAt restored:', global.__imported?.fetchedAt === 123,
+        '| reloaded:', !!global.location.reloaded);
       console.log('SMOKE-OK');
       process.exit(0);
     }, 500);

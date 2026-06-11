@@ -11,7 +11,10 @@ heatmap + dekking overlays and an animated timeline on the map**
 
 A Firefox/Chrome browser extension (Manifest V3) that:
 1. Injects a "🗺 OVerzicht" button next to each OV-chipkaart card name on ov-chipkaart.nl
-2. On click: fetches up to 1 year of travel history via the site's own backend API
+2. On click: fetches up to 5 years of travel history via the site's own backend API
+   (newest-first 30-day chunks; stops walking back after 4 consecutive empty/error chunks
+   older than a year — `HISTORY_YEARS` / `MAX_EMPTY_OLD_CHUNKS` in content_script.js — so
+   worst case equals the old 1-year scrape)
 3. Parses the resulting CSV and stores it in `chrome.storage.local`
 4. Opens a new tab with a Leaflet/CARTO dashboard showing routes as polylines + a trips table
 
@@ -165,6 +168,16 @@ fallbacks count as-the-crow-flies (footnoted in the UI).
 Mode per trip: GTFS match ⇒ TRAIN; otherwise the matched line's mode; otherwise the CSV
 heuristic, with 'BTM' when stop-name shape only narrows it to bus/tram/metro.
 
+## Export / import (back-up)
+
+Header buttons in the dashboard. **⬇ Export** downloads storage as
+`overzicht-export-YYYY-MM-DD.json`: `{ format: 'overzicht-trips', version: 1, exportedAt,
+fetchedAt, trips }` with the raw *unmerged* rows, so re-import behaves like a fresh fetch.
+**⬆ Import** accepts that file or a bare trips array, validates (rows need `date` +
+`from`/`to`), asks for confirmation, **replaces** `chrome.storage.local` and reloads the
+dashboard. Merging an old export with a fresh fetch (dedupe) is not implemented — see
+backlog.
+
 ## Heatmap overlay
 
 `heatLayer` (layer control: "Heatmap (frequentie)", off by default) is rebuilt on every
@@ -264,6 +277,8 @@ The **GTFS vertrek** column shows the matched departure (e.g. `08:32 Intercity`)
 | Netwerkdekking-statistiek (% spoornet bereisd, per modus) | ✅ |
 | Timeline op kaart (intensiteitsgrafiek, sleepbaar venster, play met snelheidskeuze, fades) | ✅ |
 | Dashboard smoke harness | ✅ (`scripts/test_dashboard_smoke.js`) |
+| 5-jaar scrape met automatische terugval naar wat de backend bewaart | ✅ (ongetest tegen live API) |
+| Export/import van reisdata (JSON-back-up) | ✅ |
 
 Reference run (406 cached rows, 2026-06-11): **189/189 drawable journeys get a real
 geometric route** (117 line match, 72 GTFS match), 8 rondrit (from == to, nothing to
@@ -278,6 +293,10 @@ draw), 0 straight lines, 0 missing stops.
 - The lijnnetkaart is a current snapshot — lines that were rerouted/discontinued since a
   historical trip may match a slightly different geometry, or none
 - Fetches ALL cards on every button click; could scope to the clicked card
+- The 5-year scrape hasn't run against the live API yet — verify the early-stop log
+  ("bewaartermijn bereikt") looks sane on a real card
+- Import replaces storage; merging an old export with a fresh fetch (dedupe on
+  date|checkIn|from|to|card) would let exports extend past the retention window
 - Distribution packaging (zip for Firefox/Chrome Web Store)
 - Statistics ideas 6–8 (outlier gallery, geographic extremes, transfer analysis) are still
   open — see `docs/STATISTICS_IDEAS.md`; idea 2's subscription what-if needs NS price tables

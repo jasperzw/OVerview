@@ -80,7 +80,7 @@ header h1 {
 }
 
 #btn-apply { background: #ffb612; color: #003082; }
-#btn-reset  { background: rgba(255,255,255,0.15); color: #fff; }
+#btn-reset, #btn-export, #btn-import { background: rgba(255,255,255,0.15); color: #fff; }
 
 .stats {
   margin-left: auto;
