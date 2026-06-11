@@ -229,7 +229,10 @@ function dateChunks(from, to, chunkDays = 30) {
 // once chunks older than a year consistently return nothing. Worst case the
 // result is exactly the old 1-year scrape.
 const HISTORY_YEARS = 5;
-const MAX_EMPTY_OLD_CHUNKS = 4; // consecutive no-data chunks (>1 jaar oud) before giving up
+// Consecutive no-data chunks (>1 jaar oud) before giving up. Generous on
+// purpose: 8 chunks = 240 days, so a half-year travel gap (e.g. living
+// abroad) doesn't get mistaken for the backend's retention limit.
+const MAX_EMPTY_OLD_CHUNKS = 8;
 
 async function fetchAllCards() {
   console.group('OVerzicht fetch');

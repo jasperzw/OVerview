@@ -12,9 +12,10 @@ heatmap + dekking overlays and an animated timeline on the map**
 A Firefox/Chrome browser extension (Manifest V3) that:
 1. Injects a "🗺 OVerzicht" button next to each OV-chipkaart card name on ov-chipkaart.nl
 2. On click: fetches up to 5 years of travel history via the site's own backend API
-   (newest-first 30-day chunks; stops walking back after 4 consecutive empty/error chunks
-   older than a year — `HISTORY_YEARS` / `MAX_EMPTY_OLD_CHUNKS` in content_script.js — so
-   worst case equals the old 1-year scrape)
+   (newest-first 30-day chunks; stops walking back after 8 consecutive empty/error chunks
+   older than a year (240 days, so a half-year travel gap isn't mistaken for the retention
+   limit) — `HISTORY_YEARS` / `MAX_EMPTY_OLD_CHUNKS` in content_script.js — so worst case
+   roughly equals the old 1-year scrape)
 3. Parses the resulting CSV and stores it in `chrome.storage.local`
 4. Opens a new tab with a Leaflet/CARTO dashboard showing routes as polylines + a trips table
 
