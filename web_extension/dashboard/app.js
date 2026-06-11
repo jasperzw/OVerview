@@ -20,9 +20,22 @@ const ormLayer = L.tileLayer('https://tiles.openrailwaymap.org/standard/{z}/{x}/
   zoomOffset: -1,
 });
 
+// Vector layers: per-trip polylines (default), a frequency heatmap where
+// often-travelled paths and often-visited stops glow hotter, and a coverage
+// scratch map showing the full rail network with the travelled part lit up
+// (both off by default).
+let routeLayer    = L.layerGroup().addTo(map);
+let heatLayer     = L.layerGroup();
+let coverageLayer = L.layerGroup();
+
 L.control.layers(
   null,
-  { 'Spoorwegen (OpenRailwayMap)': ormLayer },
+  {
+    'Ritten': routeLayer,
+    'Heatmap (frequentie)': heatLayer,
+    'Dekking (scratch map)': coverageLayer,
+    'Spoorwegen (OpenRailwayMap)': ormLayer,
+  },
   { position: 'topright', collapsed: false }
 ).addTo(map);
 
@@ -81,20 +94,36 @@ async function loadSchedules() {
 
 // ─── Route rendering ──────────────────────────────────────────────────────────
 
-let routeLayer = L.layerGroup().addTo(map);
 let allTrips = [];
 let routeDebugLog = [];
+let tripLayerIndex = []; // {dayNum, layers:[line, hit, dot], visible} per drawn trip, for the timeline
 
 function renderTrips(trips) {
   routeLayer.clearLayers();
   routeDebugLog = [];
+  tripLayerIndex = [];
 
   let shown = 0;
   let missing = 0;
   let straightLine = 0;
 
+  // Per-trip records for the statistics tabs (stats.js): the trip plus the
+  // geometry that was actually drawn, so distances follow the real route.
+  const statsRecords = [];
+
+  // Frequency data for the heatmap overlay: identical paths and stops are
+  // pooled, the count drives colour/weight.
+  const heatPaths = new Map();
+  const heatStops = new Map();
+
+  // Real (matched) geometries for the coverage scratch map.
+  const coveragePaths = [];
+
   trips.forEach((trip) => {
-    if (!trip.from || !trip.to) return;
+    if (!trip.from || !trip.to) {
+      statsRecords.push({ trip, latlngs: null, geometric: false, isRoundTrip: false, mode: null });
+      return;
+    }
 
     const resolved  = OVMatch.resolveJourneyStops(trip);
     const fromCoord = resolved.from;
@@ -114,6 +143,7 @@ function renderTrips(trips) {
     if (!fromCoord || !toCoord) {
       dbg.result = 'stop ontbreekt';
       routeDebugLog.push(dbg);
+      statsRecords.push({ trip, latlngs: null, geometric: false, isRoundTrip: false, mode: null });
       missing++;
       return;
     }
@@ -140,6 +170,21 @@ function renderTrips(trips) {
 
     if (!routeCoords && !isRoundTrip) straightLine++;
 
+    // Mode for the statistics tabs: a GTFS hit is per definition a train, a
+    // line match knows its own mode, otherwise fall back to the CSV heuristic
+    // ('BTM' when the stop-name shape only narrows it to bus/tram/metro).
+    const candidateModes = OVMatch.detectModes(trip);
+    const statsMode = gtfs ? 'TRAIN'
+      : dbg.matchedMode ?? (candidateModes.length === 1 ? candidateModes[0] : 'BTM');
+    statsRecords.push({
+      trip,
+      latlngs: isRoundTrip ? null : latlngs,
+      geometric: !!routeCoords,
+      isRoundTrip,
+      mode: statsMode,
+      gtfsDep: dep, // matched departure {dep, type, headsign, …} or null
+    });
+
     // Colour by the operator of the matched line when we know it (more
     // specific than what the CSV product text gives us).
     const colour = OPERATOR_COLOUR[dbg.matchedOperator] ?? colourForOperator(trip.operator);
@@ -147,21 +192,46 @@ function renderTrips(trips) {
     const popupContent = buildPopup(trip, !!routeCoords, dep);
 
     // Thin visible line (pointer-events disabled so it never steals clicks)
-    L.polyline(latlngs, { color: colour, weight: 2.5, opacity: 0.65, interactive: false })
+    const line = L.polyline(latlngs, { color: colour, weight: 2.5, opacity: 0.65, interactive: false })
       .addTo(routeLayer);
 
     // Wide invisible hit area — makes the line easy to click/tap
-    L.polyline(latlngs, { color: colour, weight: 16, opacity: 0 })
+    const hit = L.polyline(latlngs, { color: colour, weight: 16, opacity: 0 })
       .bindPopup(popupContent)
       .addTo(routeLayer);
 
     // Midpoint dot — unambiguous click target in operator colour
     const mid = latlngs[Math.floor(latlngs.length / 2)];
-    L.circleMarker(mid, {
+    const dot = L.circleMarker(mid, {
       radius: 7, color: '#fff', weight: 2, fillColor: colour, fillOpacity: 1,
     })
       .bindPopup(popupContent)
       .addTo(routeLayer);
+
+    tripLayerIndex.push({
+      dayNum: dayNumber(parseOVDate(trip.date)),
+      layers: [line, hit, dot],
+      visible: true,
+    });
+
+    // Heatmap accumulation: pool identical paths (direction-insensitive) and
+    // count every stop visit.
+    if (!isRoundTrip && latlngs.length > 1) {
+      const k = heatKey(latlngs);
+      const e = heatPaths.get(k);
+      if (e) e.count++; else heatPaths.set(k, { latlngs, count: 1 });
+    }
+    if (routeCoords && !isRoundTrip) {
+      coveragePaths.push({ latlngs, mode: statsMode });
+    }
+    const heatStopList = isRoundTrip
+      ? [[trip.from, fromCoord]]
+      : [[trip.from, fromCoord], [trip.to, toCoord]];
+    for (const [name, c] of heatStopList) {
+      const sk = `${c.lat.toFixed(4)},${c.lon.toFixed(4)}`;
+      const e = heatStops.get(sk);
+      if (e) e.count++; else heatStops.set(sk, { name, coord: c, count: 1 });
+    }
   });
 
   if (shown > 0) {
@@ -174,6 +244,114 @@ function renderTrips(trips) {
   updateStats(trips, shown, missing, straightLine);
   renderTable(trips);
   renderDebugTable();
+  OVStats.renderAll(statsRecords, { getPool: (mode) => OVMatch.getRoutePool([mode]) });
+  renderHeatmap(heatPaths, heatStops);
+
+  coverageData = { paths: coveragePaths, stops: [...heatStops.values()].map((s) => s.coord) };
+  coverageStale = true;
+  if (map.hasLayer(coverageLayer)) buildCoverageLayer();
+
+  resetTimeline();
+}
+
+// ─── Coverage scratch map ─────────────────────────────────────────────────────
+// 'Dekking (scratch map)' overlay: the full TRAIN/TRAM/METRO lijnnetkaart in
+// faint grey with every travelled geometry lit up on top, plus dots for the
+// visited stops. Rendered on a canvas — the base network is thousands of
+// polylines, too many for the default SVG renderer. Built lazily on first
+// enable and rebuilt when the rendered trip set changes.
+
+const coverageRenderer = L.canvas({ padding: 0.5 });
+let coverageStale = true;
+let coverageData = { paths: [], stops: [] };
+
+function buildCoverageLayer() {
+  coverageLayer.clearLayers();
+
+  for (const mode of ['TRAIN', 'TRAM', 'METRO']) {
+    for (const route of OVMatch.getRoutePool([mode])) {
+      if (!route.coords || route.coords.length < 2) continue;
+      L.polyline(route.coords, {
+        renderer: coverageRenderer,
+        color: '#9aa6bf',
+        weight: mode === 'TRAIN' ? 1.4 : 1,
+        opacity: 0.5,
+        interactive: false,
+      }).addTo(coverageLayer);
+    }
+  }
+
+  for (const { latlngs, mode } of coverageData.paths) {
+    if (mode === 'BUS') continue; // the base layer shows rail networks only
+    L.polyline(latlngs, {
+      renderer: coverageRenderer,
+      color: '#f59f00', weight: 3, opacity: 0.9, interactive: false,
+    }).addTo(coverageLayer);
+  }
+
+  for (const c of coverageData.stops) {
+    L.circleMarker([c.lat, c.lon], {
+      renderer: coverageRenderer,
+      radius: 3, stroke: false, fillColor: '#e8590c', fillOpacity: 0.9,
+      interactive: false,
+    }).addTo(coverageLayer);
+  }
+
+  coverageStale = false;
+}
+
+map.on('overlayadd', (e) => {
+  if (e.layer === coverageLayer && coverageStale) buildCoverageLayer();
+});
+
+// ─── Heatmap ──────────────────────────────────────────────────────────────────
+// Frequency overlay: every distinct path/stop is drawn once, coloured and
+// weighted by how often it was travelled/visited (log scale). Lives in
+// heatLayer, toggled via the layer control.
+
+function heatKey(latlngs) {
+  const r = (p) => `${p[0].toFixed(4)},${p[1].toFixed(4)}`;
+  const [a, b] = [r(latlngs[0]), r(latlngs[latlngs.length - 1])].sort();
+  return `${latlngs.length}|${a}|${b}`;
+}
+
+function heatColour(t) {
+  const ramp = [[255, 213, 79], [251, 140, 0], [213, 0, 0]]; // yellow → orange → red
+  const x = t * (ramp.length - 1);
+  const i = Math.min(Math.floor(x), ramp.length - 2);
+  const f = x - i;
+  const c = ramp[i].map((v, k) => Math.round(v + (ramp[i + 1][k] - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function renderHeatmap(paths, stops) {
+  heatLayer.clearLayers();
+
+  const maxP = Math.max(1, ...[...paths.values()].map((p) => p.count));
+  [...paths.values()]
+    .sort((a, b) => a.count - b.count) // hottest paths drawn on top
+    .forEach(({ latlngs, count }) => {
+      const t = Math.log(count + 1) / Math.log(maxP + 1);
+      L.polyline(latlngs, {
+        color: heatColour(t),
+        weight: 2.5 + 4.5 * t,
+        opacity: 0.45 + 0.45 * t,
+        interactive: false,
+      }).addTo(heatLayer);
+    });
+
+  const maxS = Math.max(1, ...[...stops.values()].map((s) => s.count));
+  for (const { name, coord, count } of stops.values()) {
+    const t = Math.log(count + 1) / Math.log(maxS + 1);
+    L.circleMarker([coord.lat, coord.lon], {
+      radius: 3 + 5 * t,
+      stroke: false,
+      fillColor: heatColour(t),
+      fillOpacity: 0.8,
+    })
+      .bindPopup(`<strong>${name}</strong><br>${count} bezoek${count === 1 ? '' : 'en'}`)
+      .addTo(heatLayer);
+  }
 }
 
 // ─── Journey helpers ──────────────────────────────────────────────────────────
@@ -385,6 +563,207 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   document.querySelectorAll('.btn-preset').forEach((b) => b.classList.remove('active'));
   renderTrips(allTrips);
 });
+
+// ─── Timeline ─────────────────────────────────────────────────────────────────
+// Full-width bar at the bottom of the map: an intensity graph (ritten per dag)
+// over the whole rendered period, with a draggable highlight window the width
+// of the chosen periode (week/maand). ▶ sweeps the window across the period at
+// the selected speed; trips outside the window fade out via the CSS transition
+// on stroke/fill-opacity (style.css).
+
+const tlGraph  = document.getElementById('tl-graph');
+const tlSvg    = document.getElementById('tl-svg');
+const tlWindow = document.getElementById('tl-window');
+const tlLabel  = document.getElementById('tl-label');
+const tlPlay   = document.getElementById('tl-play');
+const tlSpeed  = document.getElementById('tl-speed');
+
+const timeline = {
+  active: false,    // false = window disengaged, all trips visible
+  playing: false,
+  timer: null,
+  startDay: null,   // UTC day numbers spanning the rendered trips
+  endDay: null,
+  windowDays: 7,
+  pos: 0,           // window offset in days from startDay
+  msPerDay: +tlSpeed.value || 180,
+};
+
+function dayNumber(date) {
+  return date
+    ? Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5)
+    : null;
+}
+
+function fmtDay(dayNum) {
+  return new Date(dayNum * 864e5)
+    .toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function timelineSpan() {
+  return timeline.startDay === null ? 0 : timeline.endDay - timeline.startDay + 1;
+}
+
+function timelineMax() {
+  return Math.max(0, timelineSpan() - timeline.windowDays);
+}
+
+// Called from renderTrips: the trip set (and thus the period) changed.
+function resetTimeline() {
+  stopTimelinePlay();
+  timeline.active = false;
+  timeline.pos = 0;
+  const days = tripLayerIndex.map((e) => e.dayNum).filter((d) => d !== null);
+  timeline.startDay = days.length ? Math.min(...days) : null;
+  timeline.endDay   = days.length ? Math.max(...days) : null;
+  tlLabel.textContent = 'Hele periode';
+  buildTimelineGraph();
+  updateTimelineWindowEl();
+  document.getElementById('timeline').classList.toggle('hidden', timeline.startDay === null);
+  map.invalidateSize(); // the bar shares the tab with the map (flex column)
+}
+
+// Intensity graph: ritten per dag over the whole period as an SVG area + line,
+// stretched to the full bar width (1 SVG unit per day, preserveAspectRatio=none).
+function buildTimelineGraph() {
+  const span = timelineSpan();
+  if (!span) { tlSvg.innerHTML = ''; return; }
+
+  const counts = new Array(span).fill(0);
+  for (const e of tripLayerIndex) {
+    if (e.dayNum !== null) counts[e.dayNum - timeline.startDay]++;
+  }
+
+  const H = 40;
+  const max = Math.max(1, ...counts);
+  const y = (c) => (H - 2 - (c / max) * (H - 6)).toFixed(2);
+  const pts = counts.map((c, i) => `${i + 0.5},${y(c)}`);
+
+  tlSvg.setAttribute('viewBox', `0 0 ${span} ${H}`);
+  tlSvg.innerHTML =
+    `<path d="M0,${H} L${pts.join(' L')} L${span},${H} Z" fill="rgba(0,48,130,0.18)"/>` +
+    `<path d="M${pts.join(' L')}" fill="none" stroke="#003082" stroke-width="1.5"
+       vector-effect="non-scaling-stroke"/>`;
+}
+
+function updateTimelineWindowEl() {
+  const span = timelineSpan();
+  if (!timeline.active || !span) { tlWindow.classList.add('hidden'); return; }
+  tlWindow.classList.remove('hidden');
+  tlWindow.style.left  = `${(timeline.pos / span) * 100}%`;
+  tlWindow.style.width = `${(Math.min(timeline.windowDays, span) / span) * 100}%`;
+}
+
+function setTripVisible(entry, vis) {
+  if (entry.visible === vis) return;
+  entry.visible = vis;
+  const [line, hit, dot] = entry.layers;
+  line.setStyle({ opacity: vis ? 0.65 : 0 });
+  dot.setStyle({ opacity: vis ? 1 : 0, fillOpacity: vis ? 1 : 0 });
+  // The hit area stays invisible either way; disable its pointer events so
+  // faded-out trips can't be clicked.
+  for (const l of [hit, dot]) {
+    const el = l.getElement && l.getElement();
+    if (el) el.style.pointerEvents = vis ? '' : 'none';
+  }
+}
+
+function applyTimelineWindow() {
+  const from = timeline.startDay + timeline.pos;
+  const to   = from + timeline.windowDays - 1; // inclusive
+  tlLabel.textContent = `${fmtDay(from)} – ${fmtDay(to)}`;
+  updateTimelineWindowEl();
+  tripLayerIndex.forEach((e) =>
+    setTripVisible(e, e.dayNum !== null && e.dayNum >= from && e.dayNum <= to));
+}
+
+function setTimelinePos(p) {
+  timeline.active = true;
+  timeline.pos = Math.max(0, Math.min(timelineMax(), Math.round(p)));
+  applyTimelineWindow();
+}
+
+function exitTimeline() {
+  stopTimelinePlay();
+  timeline.active = false;
+  timeline.pos = 0;
+  tlLabel.textContent = 'Hele periode';
+  updateTimelineWindowEl();
+  tripLayerIndex.forEach((e) => setTripVisible(e, true));
+}
+
+function stopTimelinePlay() {
+  timeline.playing = false;
+  if (timeline.timer) { clearInterval(timeline.timer); timeline.timer = null; }
+  if (tlPlay) tlPlay.textContent = '▶';
+}
+
+function timelineTick() {
+  if (timeline.pos >= timelineMax()) { stopTimelinePlay(); return; }
+  timeline.pos++;
+  applyTimelineWindow();
+}
+
+function startTimelinePlay() {
+  if (timeline.startDay === null) return;
+  if (!timeline.active || timeline.pos >= timelineMax()) timeline.pos = 0; // (re)start
+  timeline.active = true;
+  timeline.playing = true;
+  tlPlay.textContent = '⏸';
+  applyTimelineWindow();
+  timeline.timer = setInterval(timelineTick, timeline.msPerDay);
+}
+
+tlPlay.addEventListener('click', () =>
+  timeline.playing ? stopTimelinePlay() : startTimelinePlay());
+
+// Drag the window across the graph, or click the graph to centre it there.
+// Pointer capture keeps the drag alive when the cursor leaves the bar.
+let tlDragOffset = null;
+
+function dayAtClientX(x) {
+  const r = tlGraph.getBoundingClientRect();
+  const t = Math.min(1, Math.max(0, (x - r.left) / r.width));
+  return timeline.startDay + t * timelineSpan();
+}
+
+tlGraph.addEventListener('pointerdown', (e) => {
+  if (timeline.startDay === null) return;
+  stopTimelinePlay();
+  if (e.target !== tlWindow) {
+    setTimelinePos(dayAtClientX(e.clientX) - timeline.startDay - timeline.windowDays / 2);
+  }
+  tlDragOffset = dayAtClientX(e.clientX) - (timeline.startDay + timeline.pos);
+  tlGraph.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+
+tlGraph.addEventListener('pointermove', (e) => {
+  if (tlDragOffset === null) return;
+  setTimelinePos(dayAtClientX(e.clientX) - timeline.startDay - tlDragOffset);
+});
+
+tlGraph.addEventListener('pointerup',     () => { tlDragOffset = null; });
+tlGraph.addEventListener('pointercancel', () => { tlDragOffset = null; });
+
+document.querySelectorAll('.tl-win').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tl-win').forEach((b) => b.classList.toggle('active', b === btn));
+    timeline.windowDays = +btn.dataset.days;
+    timeline.pos = Math.min(timeline.pos, timelineMax());
+    if (timeline.active) applyTimelineWindow();
+  });
+});
+
+tlSpeed.addEventListener('change', () => {
+  timeline.msPerDay = +tlSpeed.value || 180;
+  if (timeline.playing) { // restart the ticker at the new pace
+    clearInterval(timeline.timer);
+    timeline.timer = setInterval(timelineTick, timeline.msPerDay);
+  }
+});
+
+document.getElementById('tl-reset').addEventListener('click', exitTimeline);
 
 // ─── Tab switching ────────────────────────────────────────────────────────────
 

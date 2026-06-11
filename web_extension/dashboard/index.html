@@ -41,11 +41,40 @@
   <nav class="tabs">
     <button class="tab active" data-tab="map">Kaart</button>
     <button class="tab" data-tab="table">Ritten</button>
+    <button class="tab" data-tab="stats">Statistieken</button>
+    <button class="tab" data-tab="costs">Kosten</button>
+    <button class="tab" data-tab="habits">Gewoontes</button>
+    <button class="tab" data-tab="trains">Treinen</button>
     <button class="tab" data-tab="debug">Routes</button>
   </nav>
 
   <div id="tab-map" class="tab-panel">
     <div id="map"></div>
+
+    <div id="timeline" class="hidden">
+      <div class="tl-controls">
+        <button id="tl-play" title="Tijdvenster over de periode afspelen">▶</button>
+        <div class="tl-window-btns">
+          <button class="tl-win active" data-days="7">Week</button>
+          <button class="tl-win" data-days="30">Maand</button>
+        </div>
+        <label class="tl-speed" title="Afspeelsnelheid">
+          Snelheid
+          <select id="tl-speed">
+            <option value="360">0,5×</option>
+            <option value="180" selected>1×</option>
+            <option value="90">2×</option>
+            <option value="45">4×</option>
+          </select>
+        </label>
+        <span id="tl-label">Hele periode</span>
+        <button id="tl-reset" title="Toon alle ritten">✕</button>
+      </div>
+      <div id="tl-graph" title="Klik of sleep om het tijdvenster te verplaatsen">
+        <svg id="tl-svg" preserveAspectRatio="none"></svg>
+        <div id="tl-window" class="hidden"></div>
+      </div>
+    </div>
   </div>
 
   <div id="tab-table" class="tab-panel hidden">
@@ -67,6 +96,22 @@
         <tbody id="trips-tbody"></tbody>
       </table>
     </div>
+  </div>
+
+  <div id="tab-stats" class="tab-panel hidden">
+    <div class="stats-wrap" id="stats-totals"></div>
+  </div>
+
+  <div id="tab-costs" class="tab-panel hidden">
+    <div class="stats-wrap" id="stats-costs"></div>
+  </div>
+
+  <div id="tab-habits" class="tab-panel hidden">
+    <div class="stats-wrap" id="stats-habits"></div>
+  </div>
+
+  <div id="tab-trains" class="tab-panel hidden">
+    <div class="stats-wrap" id="stats-trains"></div>
   </div>
 
   <div id="tab-debug" class="tab-panel hidden">
@@ -132,6 +177,7 @@
   </div>
 
   <script src="matching.js"></script>
+  <script src="stats.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

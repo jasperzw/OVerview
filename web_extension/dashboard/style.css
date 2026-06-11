@@ -129,9 +129,145 @@ header h1 {
   flex-direction: column;
 }
 
+#tab-map { position: relative; }
+
 #map {
   flex: 1;
   min-height: 0;
+}
+
+/* ── Timeline bar ───────────────────────────────────────────────────────────── */
+
+#timeline {
+  flex-shrink: 0; /* sits in flow below the map, full window width */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  border-top: 1px solid #d6deef;
+  padding: 8px 14px 10px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+}
+
+.tl-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#tl-play {
+  border: none;
+  background: #003082;
+  color: #fff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#tl-play:hover { background: #00459e; }
+
+.tl-window-btns {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tl-win {
+  border: 1px solid #c5cfe8;
+  background: #fff;
+  color: #003082;
+  border-radius: 4px;
+  padding: 3px 9px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tl-win.active {
+  background: #003082;
+  border-color: #003082;
+  color: #fff;
+}
+
+.tl-speed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: #555;
+}
+
+#tl-speed {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #003082;
+  background: #fff;
+  border: 1px solid #c5cfe8;
+  border-radius: 4px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+#tl-label {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Intensity graph with the draggable period window on top */
+#tl-graph {
+  position: relative;
+  width: 100%;
+  height: 46px;
+  background: #f4f7ff;
+  border-radius: 4px;
+  cursor: pointer;
+  touch-action: none; /* pointer-event dragging */
+}
+
+#tl-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#tl-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+  background: rgba(255,182,18,0.30);
+  border-left: 2px solid #ffb612;
+  border-right: 2px solid #ffb612;
+  border-radius: 3px;
+  cursor: grab;
+}
+
+#tl-window:active { cursor: grabbing; }
+
+#tl-reset {
+  border: none;
+  background: #e0e6f5;
+  color: #333;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#tl-reset:hover { background: #c5cfe8; }
+
+/* Trips fade in/out when the timeline window moves across them */
+.leaflet-overlay-pane path {
+  transition: stroke-opacity 0.45s ease, fill-opacity 0.45s ease;
 }
 
 /* ── Trips table ────────────────────────────────────────────────────────────── */
@@ -245,6 +381,172 @@ header h1 {
 .dbg-warn { background: #fdebd0; color: #935800; }
 .dbg-err  { background: #fadbd8; color: #922b21; }
 
+/* ── Statistics tabs (Statistieken / Kosten / Gewoontes) ────────────────────── */
+
+.stats-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 22px 32px;
+}
+
+.stat-cards {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 18px;
+  min-width: 180px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #003082;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #555;
+  margin-top: 2px;
+}
+
+.stat-sub {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 4px;
+}
+
+.stats-section { margin-top: 26px; }
+
+.stats-section h2 {
+  font-size: 0.95rem;
+  color: #003082;
+  margin-bottom: 10px;
+}
+
+.stats-note {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 6px;
+}
+
+.stats-headline {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #003082;
+  margin-bottom: 10px;
+}
+
+.stats-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stats-table th {
+  padding: 7px 14px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #003082;
+  color: #fff;
+}
+
+.stats-table td {
+  padding: 6px 14px;
+  border-bottom: 1px solid #e0e6f5;
+  white-space: nowrap;
+}
+
+.stats-table tbody tr:last-child td { border-bottom: none; }
+.stats-table tbody tr:nth-child(even) { background: #f7f9ff; }
+
+.stats-table .num,
+.stats-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-chart {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  max-width: 720px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 170px;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 0.78rem;
+}
+
+.bar-label { color: #555; white-space: nowrap; }
+
+.bar-track {
+  background: #eef2ff;
+  border-radius: 4px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: #003082;
+  border-radius: 4px;
+}
+
+.bar-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-value em {
+  color: #888;
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
+/* Punch card: 1 label column + 24 hour columns, 1 header row + 7 day rows */
+.punchcard {
+  display: inline-grid;
+  grid-template-columns: 36px repeat(24, 20px);
+  gap: 3px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.pc-hour, .pc-day {
+  font-size: 0.68rem;
+  color: #888;
+  align-self: center;
+}
+
+.pc-hour { text-align: left; }
+
+.pc-cell {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: #eef2ff;
+}
+
 /* ── No-data overlay ────────────────────────────────────────────────────────── */
 
 #no-data {
@@ -284,7 +586,7 @@ header h1 {
 
 #legend {
   position: absolute;
-  bottom: 28px;
+  bottom: 122px; /* clear of the full-width timeline bar */
   right: 10px;
   z-index: 1000;
   background: rgba(255,255,255,0.92);

@@ -1,7 +1,9 @@
 # OVerzicht – Session Handover
 
-Last updated: 2026-06-11 (route matching overhaul)  
-Current state: **working end-to-end; every drawable cached journey matches a real geometric route**
+Last updated: 2026-06-11 (statistics tabs + heatmap + timeline + coverage scratch map + Treinen)  
+Current state: **working end-to-end; every drawable cached journey matches a real geometric route;
+dashboard has 7 tabs (Kaart / Ritten / Statistieken / Kosten / Gewoontes / Treinen / Routes),
+heatmap + dekking overlays and an animated timeline on the map**
 
 ---
 
@@ -57,8 +59,9 @@ web_extension/
 │   ├── xhr_logger.js             Intercepts Angular requests, captures + persists auth headers
 │   └── background.js             Saves trips to storage, opens dashboard tab
 ├── dashboard/
-│   ├── index.html                Tabs: Kaart / Ritten / Routes (debug)
+│   ├── index.html                Tabs: Kaart / Ritten / Statistieken / Kosten / Gewoontes / Treinen / Routes (debug)
 │   ├── matching.js               ALL matching logic (browser global OVMatch / Node module)
+│   ├── stats.js                  Statistics tabs (browser global OVStats / Node module)
 │   ├── app.js                    Leaflet map + trips table + rendering (no matching logic)
 │   └── style.css
 ├── popup/
@@ -74,7 +77,8 @@ scripts/
 ├── build_route_geometries.py     Builds routes.json from OpenOV lijnnetkaart shapefile
 ├── build_trip_schedules.py       Builds schedules.json from GTFS-NL zip (NS only)
 ├── augment_stops.py              Adds missing stops.txt entries from GTFS-NL to stops.json
-└── test_route_matching.js        Node harness: replays a trips dump through matching.js
+├── test_route_matching.js        Node harness: replays a trips dump through matching.js
+└── test_dashboard_smoke.js       Node harness: app.js render/stats/heatmap/timeline with stubs
 
 research/
 └── route_matching_explained.md   Full documentation of the route matching pipeline
@@ -134,6 +138,88 @@ build script against a fresh GTFS zip whenever NS timetables change materially.
 
 ---
 
+## Statistics tabs (Statistieken / Kosten / Gewoontes)
+
+All statistics logic lives in **`dashboard/stats.js`** (`window.OVStats`, Node-requirable like
+matching.js). While rendering the map, `renderTrips` in app.js collects one record per trip —
+`{ trip, latlngs, geometric, isRoundTrip, mode }` — where `latlngs` is the geometry actually
+drawn, and hands the list to `OVStats.renderAll`. The date filter therefore applies to the
+statistics too. Distances are haversine-summed along the matched polyline; straight-line
+fallbacks count as-the-crow-flies (footnoted in the UI).
+
+- **Statistieken** — total km (× length of NL), trip count, total/average travel time, average
+  speed; per-mode and per-operator breakdowns; km-per-month bar chart.
+- **Kosten** — total spend, average per paid trip, €/km, credits; spend + €/km per operator
+  and per mode; top-5 most expensive journeys; monthly spend bars with cumulative total.
+  (Subscription what-if analysis from the ideas doc is NOT implemented — needs price tables.)
+- **Gewoontes** — day-of-week × hour-of-check-in punch card; busiest route (undirected pair),
+  longest streak of consecutive travel days, busiest day; records (earliest/latest check-in,
+  longest/farthest trip); top stations by visits (from + to both count).
+- **Treinen** — NS-specific, from the GTFS departure findGtfsMatch identified per trip
+  (`gtfsDep` on the stats record): IC/Sprinter ratio, average check-in-to-departure dwell
+  (−2…+20 min match window, midnight-normalised) with a "reisstijl" persona
+  (Perronsprinter ≤3 min / Strak gepland ≤7 / Ruim op tijd), dwell histogram, per-type and
+  per-departure-station tables, and "jouw vaste treinen" (same time + type + headsign,
+  most-repeated first). Shows an explanatory note when no trips have a GTFS match.
+
+Mode per trip: GTFS match ⇒ TRAIN; otherwise the matched line's mode; otherwise the CSV
+heuristic, with 'BTM' when stop-name shape only narrows it to bus/tram/metro.
+
+## Heatmap overlay
+
+`heatLayer` (layer control: "Heatmap (frequentie)", off by default) is rebuilt on every
+`renderTrips`. Identical trip paths are pooled direction-insensitively (`heatKey`: point
+count + sorted endpoints, 4-decimal rounding) and every stop visit is counted; colour
+(yellow→orange→red ramp), line weight and dot radius scale with log(count). Stop dots
+carry a "<naam> — N bezoeken" popup; the heat lines themselves are non-interactive.
+Hottest paths are drawn last so they stay on top.
+
+## Coverage scratch map + Netwerkdekking stats
+
+**Map layer** — "Dekking (scratch map)" in the layer control (off by default): the full
+TRAIN/TRAM/METRO lijnnetkaart in faint grey with every travelled geometry lit up in amber on
+top, plus dots for visited stops. Drawn on a dedicated `L.canvas` renderer (the base network
+is thousands of polylines — too many for SVG). Built lazily on the first `overlayadd` and
+rebuilt when the rendered trip set changes while the layer is on (`coverageStale` flag).
+BUS is excluded from the layer (the full bus network would blanket the country).
+
+**Stats** — `computeCoverage` in stats.js rasterises geometries into ~280 m cells
+(`COV_CELL`, lon corrected by cos 51°). A mode's network size = distinct cells its lines
+pass through (de-duplicates parallel routes over the same track/street); coverage = the
+fraction of those cells the travelled geometries touch, with ±1 cell tolerance because GTFS
+shapes and lijnnetkaart lines for the same track are drawn slightly apart. Clipped to an NL
+bounding box so international stretches (ICE/IC abroad) don't inflate "het Nederlandse
+spoornet" (TRAIN ≈ 3.7k cell-km vs ~9.2k unclipped). Network cell sets are cached for the
+session (~180 ms to build, ~4 ms per subsequent call). Shown as the "Netwerkdekking" section
+in the Statistieken tab with a headline ("Je hebt ≈X% van het Nederlandse spoornet bereisd")
+and a per-mode table; only geometric (matched-route) trips count, straight-line fallbacks
+don't.
+
+## Timeline (map tab)
+
+A full-width bar below the map on the Kaart tab (`#timeline`, in flex flow, hidden when no
+trips have a parseable date). It shows an **intensity graph** — ritten per dag over the whole
+rendered period, drawn as an SVG area+line stretched to the bar width (viewBox = 1 unit per
+day, `preserveAspectRatio="none"`, rebuilt in `buildTimelineGraph` on every render). On top
+sits a draggable highlight window (`#tl-window`, NS-yellow) whose width is the chosen periode
+(week/maand) as a fraction of the period. Click anywhere on the graph to centre the window
+there, or drag it (pointer capture keeps the drag alive outside the bar). ▶ sweeps the window
+one day per tick across the period; the snelheid select (0,5×/1×/2×/4× → 360/180/90/45 ms per
+day, `timeline.msPerDay`) sets the pace and can be changed mid-play. ✕ disengages and shows
+everything again.
+
+Implementation: `renderTrips` records `{dayNum, layers:[line, hit, dot]}` per drawn trip in
+`tripLayerIndex` (`dayNum` = UTC day number). Moving the window only calls `setStyle` with
+target opacities — nothing is re-rendered — and a CSS transition on
+`.leaflet-overlay-pane path` (stroke/fill-opacity, 0.45 s) produces the fade in/out. Hidden
+trips get `pointer-events: none` on their hit-area and dot elements so their popups can't be
+clicked. The header date filter re-renders, which resets the timeline to "Hele periode";
+`resetTimeline` calls `map.invalidateSize()` because showing/hiding the bar resizes the map.
+
+Smoke test: `node scripts/test_dashboard_smoke.js` loads app.js with stubbed
+Leaflet/DOM/chrome and replays synthetic journeys through render + stats + heatmap +
+timeline (prints `SMOKE-OK`).
+
 ## Routes debug tab
 
 The **Routes** tab (third tab in dashboard) shows per-trip route-matching diagnostics.
@@ -169,6 +255,15 @@ The **GTFS vertrek** column shows the matched departure (e.g. `08:32 Intercity`)
 | GTFS schedule lookup + "waarschijnlijk" popup (direction-aware) | ✅ |
 | GTFS shape geometry for matched trips | ✅ |
 | Node test harness over cached trips | ✅ (`scripts/test_route_matching.js`) |
+| Statistieken tab (km/time/speed totals + breakdowns) | ✅ |
+| Kosten tab (spend, €/km, duurste ritten, maandtrend) | ✅ |
+| Gewoontes tab (punch card, streaks, records, top stations) | ✅ |
+| Treinen tab (IC/Sprinter-ratio, incheckgedrag, vaste treinen) | ✅ |
+| Heatmap-overlay (frequentie van paden + stops, layer control) | ✅ |
+| Dekking scratch map (volledig net grijs, bereisd opgelicht) | ✅ |
+| Netwerkdekking-statistiek (% spoornet bereisd, per modus) | ✅ |
+| Timeline op kaart (intensiteitsgrafiek, sleepbaar venster, play met snelheidskeuze, fades) | ✅ |
+| Dashboard smoke harness | ✅ (`scripts/test_dashboard_smoke.js`) |
 
 Reference run (406 cached rows, 2026-06-11): **189/189 drawable journeys get a real
 geometric route** (117 line match, 72 GTFS match), 8 rondrit (from == to, nothing to
@@ -184,6 +279,10 @@ draw), 0 straight lines, 0 missing stops.
   historical trip may match a slightly different geometry, or none
 - Fetches ALL cards on every button click; could scope to the clicked card
 - Distribution packaging (zip for Firefox/Chrome Web Store)
+- Statistics ideas 6–8 (outlier gallery, geographic extremes, transfer analysis) are still
+  open — see `docs/STATISTICS_IDEAS.md`; idea 2's subscription what-if needs NS price tables
+- Idea 4's "% of network" headline counts the whole NL rail net incl. regional operators;
+  could split NS hoofdrailnet vs. regional
 
 ---
 
